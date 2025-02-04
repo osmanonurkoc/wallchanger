@@ -7,6 +7,16 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QSystemTrayIcon, QMenu, QAction, QCheckBox, QMessageBox
 
+# Define a function to locate resources in both development and compiled modes
+def resource_path(relative_path):
+    """ Get the absolute path to a resource, works for dev and PyInstaller .exe mode """
+    if getattr(sys, 'frozen', False):
+        # If running as a compiled .exe
+        return os.path.join(sys._MEIPASS, relative_path)
+    else:
+        # If running as a script
+        return os.path.abspath(relative_path)
+
 # Define the config file path in %APPDATA%\wallchanger
 appdata_dir = os.path.join(os.getenv('APPDATA'), 'wallchanger')
 config_file = os.path.join(appdata_dir, 'config.json')
@@ -95,7 +105,9 @@ class WallpaperChangerApp(QWidget):
         layout.addWidget(save_button)
 
         # System Tray setup
-        icon_path = os.path.abspath("icon.ico")
+        icon_path = resource_path("icon.ico")
+
+        # Ensure icon.ico exists
         if not os.path.exists(icon_path):
             QMessageBox.critical(self, "Error", "Missing icon.ico file!")
             sys.exit(1)  # Exit if the icon is missing
@@ -109,7 +121,6 @@ class WallpaperChangerApp(QWidget):
         tray_menu.addAction(open_action)
         tray_menu.addAction(exit_action)
         self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self.tray_icon_activated)
 
         # Ensure the tray icon is visible
         QTimer.singleShot(1000, lambda: self.tray_icon.setVisible(True))
@@ -160,20 +171,6 @@ class WallpaperChangerApp(QWidget):
         else:
             if os.path.exists(startup_path):
                 os.remove(startup_path)
-
-    def create_startup_shortcut(self, shortcut_path):
-        try:
-            from win32com.client import Dispatch
-            script_path = os.path.abspath(sys.argv[0])
-            shell = Dispatch('WScript.Shell')
-            shortcut = shell.CreateShortcut(shortcut_path)
-            shortcut.TargetPath = script_path
-            shortcut.WorkingDirectory = os.path.dirname(script_path)
-            shortcut.IconLocation = script_path
-            shortcut.save()
-            print(f"Startup shortcut created: {shortcut_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to create startup shortcut: {e}")
 
     def tray_icon_activated(self, reason):
         if reason == QSystemTrayIcon.Trigger:
