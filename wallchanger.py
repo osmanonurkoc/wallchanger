@@ -11,11 +11,8 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLa
 def resource_path(relative_path):
     """ Get the absolute path to a resource, works for dev and PyInstaller .exe mode """
     if getattr(sys, 'frozen', False):
-        # If running as a compiled .exe
         return os.path.join(sys._MEIPASS, relative_path)
-    else:
-        # If running as a script
-        return os.path.abspath(relative_path)
+    return os.path.abspath(relative_path)
 
 # Define the config file path in %APPDATA%\wallchanger
 appdata_dir = os.path.join(os.getenv('APPDATA'), 'wallchanger')
@@ -121,9 +118,10 @@ class WallpaperChangerApp(QWidget):
         tray_menu.addAction(open_action)
         tray_menu.addAction(exit_action)
         self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(self.tray_icon_activated)
 
-        # Ensure the tray icon is visible
-        QTimer.singleShot(1000, lambda: self.tray_icon.setVisible(True))
+        # Ensure the tray icon is visible immediately
+        self.tray_icon.setVisible(True)
 
         self.setLayout(layout)
 
@@ -179,6 +177,7 @@ class WallpaperChangerApp(QWidget):
     def show_window(self):
         self.show()
         self.raise_()
+        self.activateWindow()
 
     def exit_application(self):
         self.tray_icon.hide()
@@ -191,6 +190,10 @@ class WallpaperChangerApp(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # Ensure the app stays running
+
     window = WallpaperChangerApp()
-    window.show()
+
+    # Show tray icon first and ensure it stays hidden at startup
+    window.tray_icon.setVisible(True)
+
     sys.exit(app.exec_())
