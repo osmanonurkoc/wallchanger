@@ -3,8 +3,11 @@ import json
 import ctypes
 import random
 import sys
+import time
+import shutil
+import winshell
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QSystemTrayIcon, QMenu, QAction, QCheckBox, QMessageBox
 
 # Define a function to locate resources in both development and compiled modes
@@ -48,7 +51,7 @@ class WallpaperChangerApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Wallpaper Changer')
-        self.setGeometry(300, 300, 400, 300)
+        self.setGeometry(300, 300, 500, 400)
         self.initUI()
 
         # Set up variables
@@ -96,6 +99,12 @@ class WallpaperChangerApp(QWidget):
         self.run_at_startup_checkbox.clicked.connect(self.toggle_run_at_startup)
         layout.addWidget(self.run_at_startup_checkbox)
 
+        # Preview Label
+        self.preview_label = QLabel("Wallpaper Preview")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setFixedSize(300, 200)
+        layout.addWidget(self.preview_label)
+
         # Save button
         save_button = QPushButton("Save Configuration")
         save_button.clicked.connect(self.save_config)
@@ -107,7 +116,7 @@ class WallpaperChangerApp(QWidget):
         # Ensure icon.ico exists
         if not os.path.exists(icon_path):
             QMessageBox.critical(self, "Error", "Missing icon.ico file!")
-            sys.exit(1)  # Exit if the icon is missing
+            sys.exit(1)
 
         self.tray_icon = QSystemTrayIcon(QIcon(icon_path), self)
         tray_menu = QMenu()
@@ -118,7 +127,6 @@ class WallpaperChangerApp(QWidget):
         tray_menu.addAction(open_action)
         tray_menu.addAction(exit_action)
         self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self.tray_icon_activated)
 
         # Ensure the tray icon is visible immediately
         self.tray_icon.setVisible(True)
@@ -138,14 +146,13 @@ class WallpaperChangerApp(QWidget):
             config["randomize_wallpapers"] = self.randomize_checkbox.isChecked()
             with open(config_file, 'w') as f:
                 json.dump(config, f)
-            print(f"Configuration saved: {config}")
-            self.start_wallpaper_changer()  # Restart to apply new settings
+            self.start_wallpaper_changer()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save configuration: {e}")
 
     def start_wallpaper_changer(self):
         self.timer.stop()
-        interval = config.get("change_interval", 10) * 60 * 1000  # Convert to milliseconds
+        interval = config.get("change_interval", 10) * 60 * 1000
         self.timer.start(interval)
         self.change_wallpaper()
 
@@ -155,20 +162,33 @@ class WallpaperChangerApp(QWidget):
             images = [f for f in os.listdir(folder) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif'))]
             if images:
                 image_path = os.path.join(folder, random.choice(images) if config.get("randomize_wallpapers", False) else images[0])
+
+                # Preview wallpaper
+                pixmap = QPixmap(image_path)
+                self.preview_label.setPixmap(pixmap.scaled(300, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+                # Smooth transition effect
+                time.sleep(1)
+
+                # Change wallpaper
                 ctypes.windll.user32.SystemParametersInfoW(20, 0, image_path, 3)
-                print(f"Wallpaper changed to: {image_path}")
-            else:
-                print("No valid wallpaper files found in the directory.")
         else:
             print("Wallpaper folder is not set or does not exist.")
 
     def toggle_run_at_startup(self):
-        startup_path = os.path.join(os.getenv('APPDATA'), 'Microsoft\\Windows\\Start Menu\\Programs\\Startup', 'wallchanger.lnk')
+        startup_folder = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup')
+        shortcut_path = os.path.join(startup_folder, 'wallchanger.lnk')
+
         if self.run_at_startup_checkbox.isChecked():
-            self.create_startup_shortcut(startup_path)
+            winshell.CreateShortcut(
+                Path=shortcut_path,
+                Target=sys.executable,
+                Arguments=os.path.abspath(__file__),
+                Description="Wallpaper Changer"
+            )
         else:
-            if os.path.exists(startup_path):
-                os.remove(startup_path)
+            if os.path.exists(shortcut_path):
+                os.remove(shortcut_path)
 
     def tray_icon_activated(self, reason):
         if reason == QSystemTrayIcon.Trigger:
@@ -189,11 +209,6 @@ class WallpaperChangerApp(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)  # Ensure the app stays running
-
+    app.setQuitOnLastWindowClosed(False)
     window = WallpaperChangerApp()
-
-    # Show tray icon first and ensure it stays hidden at startup
-    window.tray_icon.setVisible(True)
-
     sys.exit(app.exec_())
