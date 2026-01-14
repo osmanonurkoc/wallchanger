@@ -18,7 +18,7 @@ This tool runs quietly in the system tray, rotating your desktop wallpaper from 
 
 <p align="center">
   <img src="images/screenshot1.png" width="45%" />
-  <img src="images/screenshot2.png" width="50%" />
+  <img src="images/screenshot2.png" width="40%" />
 </p>
 
 ### Why the rewrite?
