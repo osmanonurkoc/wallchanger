@@ -18,7 +18,7 @@ This tool runs quietly in the system tray, rotating your desktop wallpaper from 
 
 <p align="center">
   <img src="images/screenshot1.png" width="45%" />
-  <img src="images/screenshot2.png" width="50%" />
+  <img src="images/screenshot2.png" width="35%" />
 </p>
 
 ### Why the rewrite?
@@ -56,3 +56,24 @@ The project is designed as a **Single-File Application** for easy portability.
 Use the provided `build_script.bat` or run:
 ```bash
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+## ⚙️ Configuration
+
+Configuration is stored in `%LocalAppData%\WallpaperSlideshow\config.json`.
+
+**Features:**
+
+-   **Interval:** Set timer in minutes.
+    
+-   **Order:** Toggle between Randomized or Sequential.
+    
+-   **Startup:** Auto-start with Windows via Registry (`HKCU\Run`).
+    
+
+## 📄 License
+
+This project is licensed under the [MIT License](https://www.google.com/search?q=LICENSE).
+
+----------
+
+_Created by [@osmanonurkoc](https://github.com/osmanonurkoc)_
