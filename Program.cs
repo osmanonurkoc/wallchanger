@@ -18,6 +18,7 @@ using Microsoft.Win32;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Reflection;
+using System.ComponentModel;
 
 namespace WallpaperSlideshow;
 
@@ -113,6 +114,7 @@ public static class Gfx
 
 public class ModernButton : Button
 {
+    [DefaultValue(false)]
     public bool IsPrimary { get; set; }
     private bool _isHovered;
 
