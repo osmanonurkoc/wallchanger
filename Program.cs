@@ -55,7 +55,7 @@ public static class Theme
     /// </summary>
     public static void ApplySystemTheme()
     {
-        IsDarkMode = GetSystemTheme() == 0; // 0 = Dark, 1 = Light
+        IsDarkMode = GetSystemTheme() == 0;
 
         if (IsDarkMode)
         {
@@ -193,6 +193,139 @@ public class ModernTextBox : Panel
     }
 }
 
+public class ModernNumericUpDown : Panel
+{
+    public TextBox Inner;
+    private Rectangle _upRect;
+    private Rectangle _downRect;
+    private bool _upHovered;
+    private bool _downHovered;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public int Value
+    {
+        get => int.TryParse(Inner.Text, out int v) ? Math.Max(1, v) : 15;
+        set => Inner.Text = Math.Max(1, value).ToString();
+    }
+
+    public ModernNumericUpDown()
+    {
+        Padding = new Padding(10, 8, 26, 8);
+        BackColor = Theme.SurfaceColor;
+        Size = new Size(160, 36);
+        Cursor = Cursors.IBeam;
+
+        Inner = new TextBox
+        {
+            BorderStyle = BorderStyle.None,
+            BackColor = Theme.SurfaceColor,
+            ForeColor = Theme.TextColor,
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 10),
+            TextAlign = HorizontalAlignment.Center
+        };
+
+        Inner.KeyPress += (s, e) => { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true; };
+
+        Inner.KeyDown += (s, e) =>
+        {
+            if (e.KeyCode == Keys.Up) { Value++; e.Handled = true; }
+            else if (e.KeyCode == Keys.Down) { Value--; e.Handled = true; }
+        };
+
+        Inner.MouseWheel += HandleMouseWheel;
+        this.MouseWheel += HandleMouseWheel;
+
+        Controls.Add(Inner);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+
+    private void HandleMouseWheel(object? sender, MouseEventArgs e)
+    {
+        if (e.Delta > 0) Value++;
+        else if (e.Delta < 0) Value--;
+        if (e is HandledMouseEventArgs hme) hme.Handled = true;
+    }
+
+    public void UpdateTheme()
+    {
+        BackColor = Theme.SurfaceColor;
+        Inner.BackColor = Theme.SurfaceColor;
+        Inner.ForeColor = Theme.TextColor;
+        Invalidate();
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        bool oldUp = _upHovered, oldDown = _downHovered;
+
+        _upHovered = _upRect.Contains(e.Location);
+        _downHovered = _downRect.Contains(e.Location);
+
+        if (_upHovered || _downHovered) Cursor = Cursors.Hand;
+        else Cursor = Cursors.IBeam;
+
+        if (oldUp != _upHovered || oldDown != _downHovered) Invalidate();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _upHovered = false;
+        _downHovered = false;
+        Cursor = Cursors.Default;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (_upRect.Contains(e.Location)) Value++;
+        if (_downRect.Contains(e.Location)) Value--;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using (var b = new SolidBrush(Theme.BackColor)) e.Graphics.FillRectangle(b, ClientRectangle);
+
+        var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+        var path = Gfx.GetRoundedPath(rect, Theme.Radius);
+
+        using (var b = new SolidBrush(Theme.SurfaceColor)) e.Graphics.FillPath(b, path);
+
+        int btnWidth = 24;
+        _upRect = new Rectangle(Width - btnWidth - 1, 1, btnWidth, Height / 2 - 1);
+        _downRect = new Rectangle(Width - btnWidth - 1, Height / 2, btnWidth, Height / 2 - 1);
+
+        e.Graphics.SetClip(path);
+        if (_upHovered) using (var b = new SolidBrush(Theme.HoverColor)) e.Graphics.FillRectangle(b, _upRect);
+        if (_downHovered) using (var b = new SolidBrush(Theme.HoverColor)) e.Graphics.FillRectangle(b, _downRect);
+        e.Graphics.ResetClip();
+
+        using (var p = new Pen(Theme.BorderColor))
+        {
+            e.Graphics.DrawPath(p, path);
+            e.Graphics.DrawLine(p, Width - btnWidth - 1, 0, Width - btnWidth - 1, Height);
+            e.Graphics.DrawLine(p, Width - btnWidth - 1, Height / 2, Width, Height / 2);
+        }
+
+        using (var p = new Pen(Theme.SubTextColor, 1.5f))
+        {
+            int ux = _upRect.X + _upRect.Width / 2;
+            int uy = _upRect.Y + _upRect.Height / 2;
+            e.Graphics.DrawLine(p, ux - 4, uy + 2, ux, uy - 2);
+            e.Graphics.DrawLine(p, ux, uy - 2, ux + 4, uy + 2);
+
+            int dx = _downRect.X + _downRect.Width / 2;
+            int dy = _downRect.Y + _downRect.Height / 2;
+            e.Graphics.DrawLine(p, dx - 4, dy - 2, dx, dy + 2);
+            e.Graphics.DrawLine(p, dx, dy + 2, dx + 4, dy - 2);
+        }
+    }
+}
+
 public class ModernCheckBox : CheckBox
 {
     public ModernCheckBox()
@@ -247,7 +380,7 @@ public class MainForm : Form
     private string _appDataFolder = "";
 
     private ModernTextBox? _txtPath;
-    private ModernTextBox? _txtInterval;
+    private ModernNumericUpDown? _txtInterval;
     private ModernCheckBox? _chkRandom;
     private ModernCheckBox? _chkStartup;
     private PictureBox? _previewBox;
@@ -323,6 +456,7 @@ public class MainForm : Form
         foreach (Control c in Controls)
         {
             if (c is ModernTextBox mtb) mtb.UpdateTheme();
+            else if (c is ModernNumericUpDown mnud) mnud.UpdateTheme();
             else if (c is Label lbl) lbl.ForeColor = Theme.SubTextColor;
             else c.Invalidate();
         }
@@ -430,7 +564,6 @@ public class MainForm : Form
 
         _txtPath = new ModernTextBox { Location = new Point(x, y + 22), Size = new Size(width - 50, 36) };
         _txtPath.Inner.Text = _config.WallpaperFolder;
-        _txtPath.Inner.ReadOnly = true;
         Controls.Add(_txtPath);
 
         var btnBrowse = new ModernButton { Text = "...", Location = new Point(x + width - 45, y + 22), Size = new Size(45, 36) };
@@ -441,10 +574,8 @@ public class MainForm : Form
         CreateLabel("Interval (Min)", x, y);
         CreateLabel("Order", x + 180, y);
 
-        _txtInterval = new ModernTextBox { Location = new Point(x, y + 22), Size = new Size(160, 36) };
-        _txtInterval.Inner.Text = _config.IntervalMinutes.ToString();
-        _txtInterval.Inner.TextAlign = HorizontalAlignment.Center;
-        _txtInterval.Inner.KeyPress += Interval_KeyPress;
+        _txtInterval = new ModernNumericUpDown { Location = new Point(x, y + 22), Size = new Size(160, 36) };
+        _txtInterval.Value = _config.IntervalMinutes;
         Controls.Add(_txtInterval);
 
         _chkRandom = new ModernCheckBox { Text = "Randomize", Location = new Point(x + 185, y + 30), Checked = _config.Randomize };
@@ -476,11 +607,6 @@ public class MainForm : Form
             using var p = new Pen(Theme.BorderColor, 2);
             if (_previewBox != null)
                 e.Graphics.DrawPath(p, Gfx.GetRoundedPath(_previewBox.ClientRectangle, Theme.Radius));
-        }
-
-        private void Interval_KeyPress(object? sender, KeyPressEventArgs e)
-        {
-            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true;
         }
 
         private void BtnNext_Click(object? sender, EventArgs e) => ChangeWallpaper();
@@ -616,10 +742,9 @@ public class MainForm : Form
         // Windows API to set wallpaper
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+
         private void SetWallpaper(string path)
         {
-            // 0x0014 = SPI_SETDESKWALLPAPER
-            // 0x01 | 0x02 = SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
             SystemParametersInfo(0x0014, 0, path, 0x01 | 0x02);
         }
 
@@ -647,8 +772,7 @@ public class MainForm : Form
         private void SaveConfig()
         {
             if (_txtPath != null) _config.WallpaperFolder = _txtPath.Inner.Text;
-            if (_txtInterval != null && int.TryParse(_txtInterval.Inner.Text, out int interval))
-                _config.IntervalMinutes = Math.Max(1, interval);
+            if (_txtInterval != null) _config.IntervalMinutes = _txtInterval.Value;
             if (_chkRandom != null) _config.Randomize = _chkRandom.Checked;
             if (_chkStartup != null) _config.RunAtStartup = _chkStartup.Checked;
 
@@ -759,7 +883,7 @@ static class Program
                     SendMessage(hWnd, MainForm.WM_NEXT_WALLPAPER, IntPtr.Zero, IntPtr.Zero);
                 }
             }
-            return; // Exit this instance
+            return;
         }
 
         // If explicitly triggered via context menu but no instance was running,
