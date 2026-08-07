@@ -19,6 +19,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Reflection;
 using System.ComponentModel;
+using System.Linq;
 
 namespace WallpaperSlideshow;
 
@@ -32,6 +33,7 @@ public class Config
     public bool Randomize { get; set; } = true;
     public bool RunAtStartup { get; set; } = false;
     public int LastIndex { get; set; } = 0;
+    public string WallpaperStyle { get; set; } = "Fill";
 }
 
 /// <summary>
@@ -365,6 +367,23 @@ public class ModernCheckBox : CheckBox
     }
 }
 
+public class ModernComboBox : ComboBox
+{
+    public ModernComboBox()
+    {
+        FlatStyle = FlatStyle.Flat;
+        DropDownStyle = ComboBoxStyle.DropDownList;
+        Font = new Font("Segoe UI", 10);
+    }
+
+    public void UpdateTheme()
+    {
+        BackColor = Theme.SurfaceColor;
+        ForeColor = Theme.TextColor;
+        Invalidate();
+    }
+}
+
 // --- MAIN APPLICATION FORM ---
 
 public class MainForm : Form
@@ -383,11 +402,13 @@ public class MainForm : Form
     private ModernNumericUpDown? _txtInterval;
     private ModernCheckBox? _chkRandom;
     private ModernCheckBox? _chkStartup;
+    private ModernComboBox? _cmbStyle;
     private PictureBox? _previewBox;
     private Panel? _headerPanel;
     private ModernButton? _btnContext;
 
     private Image? _appImage;
+    private Image? _currentWallpaperImage;
     private bool _forceHidden = false;
 
     public MainForm(bool startHidden)
@@ -403,7 +424,7 @@ public class MainForm : Form
 
         // 2. Form Properties
         Text = "Wallpaper Slideshow";
-        Size = new Size(420, 680);
+        ClientSize = new Size(405, 690);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -457,9 +478,12 @@ public class MainForm : Form
         {
             if (c is ModernTextBox mtb) mtb.UpdateTheme();
             else if (c is ModernNumericUpDown mnud) mnud.UpdateTheme();
+            else if (c is ModernComboBox mcb) mcb.UpdateTheme();
             else if (c is Label lbl) lbl.ForeColor = Theme.SubTextColor;
             else c.Invalidate();
         }
+
+        UpdatePreviewStyle();
     }
 
     private void UpdateDwmTitleBar()
@@ -553,9 +577,9 @@ public class MainForm : Form
         {
             Location = new Point(x, y),
             Size = new Size(width, 200),
-            SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Theme.SurfaceColor
+            BackColor = Color.Black
         };
+        _previewBox.Region = new Region(Gfx.GetRoundedPath(_previewBox.ClientRectangle, Theme.Radius));
         _previewBox.Paint += PreviewBox_Paint;
         Controls.Add(_previewBox);
 
@@ -582,10 +606,20 @@ public class MainForm : Form
         Controls.Add(_chkRandom);
 
         y += 75;
-        _chkStartup = new ModernCheckBox { Text = "Run at Windows Startup", Location = new Point(x, y), Checked = _config.RunAtStartup };
+        CreateLabel("Run Settings", x, y);
+        CreateLabel("Fit Style", x + 180, y);
+
+        _chkStartup = new ModernCheckBox { Text = "Run at Startup", Location = new Point(x, y + 25), Size = new Size(160, 26), Checked = _config.RunAtStartup };
         Controls.Add(_chkStartup);
 
-        y += 40;
+        _cmbStyle = new ModernComboBox { Location = new Point(x + 185, y + 22), Size = new Size(170, 36) };
+        _cmbStyle.Items.AddRange(new object[] { "Fill", "Fit", "Stretch", "Center", "Tile", "Span" });
+        _cmbStyle.SelectedItem = string.IsNullOrEmpty(_config.WallpaperStyle) ? "Fill" : _config.WallpaperStyle;
+        _cmbStyle.UpdateTheme();
+        _cmbStyle.SelectedIndexChanged += (s, e) => UpdatePreviewStyle();
+        Controls.Add(_cmbStyle);
+
+        y += 75;
         var btnNext = new ModernButton { Text = "Next Wall", Location = new Point(x, y), Size = new Size(170, 40) };
         btnNext.Click += BtnNext_Click;
         Controls.Add(btnNext);
@@ -594,7 +628,7 @@ public class MainForm : Form
         _btnContext.Click += ToggleContextMenu;
         Controls.Add(_btnContext);
 
-        y += 55;
+        y += 60;
         var btnSave = new ModernButton { Text = "Save & Minimize", Location = new Point(x, y), Size = new Size(width, 45), IsPrimary = true };
         btnSave.Click += SaveAndHide;
         Controls.Add(btnSave);
@@ -605,6 +639,7 @@ public class MainForm : Form
         private void PreviewBox_Paint(object? sender, PaintEventArgs e)
         {
             using var p = new Pen(Theme.BorderColor, 2);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             if (_previewBox != null)
                 e.Graphics.DrawPath(p, Gfx.GetRoundedPath(_previewBox.ClientRectangle, Theme.Radius));
         }
@@ -745,6 +780,30 @@ public class MainForm : Form
 
         private void SetWallpaper(string path)
         {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", true);
+                if (key != null)
+                {
+                    string style = "10";
+                    string tile = "0";
+
+                    switch (_config.WallpaperStyle.ToLower())
+                    {
+                        case "fill": style = "10"; tile = "0"; break;
+                        case "fit": style = "6"; tile = "0"; break;
+                        case "stretch": style = "2"; tile = "0"; break;
+                        case "center": style = "0"; tile = "0"; break;
+                        case "tile": style = "0"; tile = "1"; break;
+                        case "span": style = "22"; tile = "0"; break;
+                    }
+
+                    key.SetValue("WallpaperStyle", style);
+                    key.SetValue("TileWallpaper", tile);
+                }
+            }
+            catch { }
+
             SystemParametersInfo(0x0014, 0, path, 0x01 | 0x02);
         }
 
@@ -761,12 +820,105 @@ public class MainForm : Form
 
                     if (files.Count > 0 && _config.LastIndex < files.Count && _config.LastIndex >= 0)
                     {
+                        var oldImage = _currentWallpaperImage;
+
                         using var temp = Image.FromFile(files[_config.LastIndex]);
-                        _previewBox.Image = new Bitmap(temp);
+                        _currentWallpaperImage = new Bitmap(temp);
+
+                        oldImage?.Dispose();
+
+                        UpdatePreviewStyle();
                     }
                 }
             }
             catch { }
+        }
+
+        private void UpdatePreviewStyle()
+        {
+            if (_previewBox == null || _cmbStyle == null || _currentWallpaperImage == null) return;
+
+            string style = _cmbStyle.SelectedItem?.ToString() ?? "Fill";
+
+            var oldBmp = _previewBox.Image;
+            _previewBox.Image = RenderPreview(_currentWallpaperImage, style, _previewBox.Size);
+            oldBmp?.Dispose();
+        }
+
+        // Conceptual preview drawing engine in the style of Windows 7.
+        private Bitmap RenderPreview(Image original, string style, Size canvasSize)
+        {
+            Bitmap bmp = new Bitmap(canvasSize.Width, canvasSize.Height);
+            using Graphics g = Graphics.FromImage(bmp);
+
+            g.Clear(Color.Black);
+            g.SmoothingMode = SmoothingMode.HighQuality;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+            if (original == null) return bmp;
+
+            Rectangle destRect;
+            Rectangle srcRect = new Rectangle(0, 0, original.Width, original.Height);
+
+            float ratio;
+            int w, h;
+
+            switch (style.ToLower())
+            {
+                case "stretch":
+                case "span":
+                    destRect = new Rectangle(0, 0, canvasSize.Width, canvasSize.Height);
+                    g.DrawImage(original, destRect, srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, GraphicsUnit.Pixel);
+                    break;
+
+                case "fit":
+                    ratio = Math.Min(canvasSize.Width / (float)original.Width, canvasSize.Height / (float)original.Height);
+                    w = (int)(original.Width * ratio);
+                    h = (int)(original.Height * ratio);
+                    destRect = new Rectangle((canvasSize.Width - w) / 2, (canvasSize.Height - h) / 2, w, h);
+                    g.DrawImage(original, destRect, srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, GraphicsUnit.Pixel);
+                    break;
+
+                case "fill":
+                    ratio = Math.Max(canvasSize.Width / (float)original.Width, canvasSize.Height / (float)original.Height);
+                    w = (int)(original.Width * ratio);
+                    h = (int)(original.Height * ratio);
+                    destRect = new Rectangle((canvasSize.Width - w) / 2, (canvasSize.Height - h) / 2, w, h);
+                    g.DrawImage(original, destRect, srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, GraphicsUnit.Pixel);
+                    break;
+
+                case "center":
+                    ratio = Math.Min(canvasSize.Width / (float)original.Width, canvasSize.Height / (float)original.Height) * 0.6f;
+                    w = (int)(original.Width * ratio);
+                    h = (int)(original.Height * ratio);
+                    destRect = new Rectangle((canvasSize.Width - w) / 2, (canvasSize.Height - h) / 2, w, h);
+                    g.DrawImage(original, destRect, srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, GraphicsUnit.Pixel);
+                    break;
+
+                case "tile":
+                    ratio = (canvasSize.Width * 0.25f) / original.Width;
+                    w = (int)(original.Width * ratio);
+                    h = (int)(original.Height * ratio);
+                    if (w <= 0) w = 1;
+                    if (h <= 0) h = 1;
+
+                    using (Bitmap tileBmp = new Bitmap(w, h))
+                    {
+                        using (Graphics tg = Graphics.FromImage(tileBmp))
+                        {
+                            tg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            tg.DrawImage(original, new Rectangle(0, 0, w, h), srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, GraphicsUnit.Pixel);
+                        }
+                        using (TextureBrush tb = new TextureBrush(tileBmp))
+                        {
+                            g.FillRectangle(tb, new Rectangle(0, 0, canvasSize.Width, canvasSize.Height));
+                        }
+                    }
+                    break;
+            }
+
+            return bmp;
         }
 
         private void SaveConfig()
@@ -775,6 +927,7 @@ public class MainForm : Form
             if (_txtInterval != null) _config.IntervalMinutes = _txtInterval.Value;
             if (_chkRandom != null) _config.Randomize = _chkRandom.Checked;
             if (_chkStartup != null) _config.RunAtStartup = _chkStartup.Checked;
+            if (_cmbStyle != null) _config.WallpaperStyle = _cmbStyle.SelectedItem?.ToString() ?? "Fill";
 
             try
             {
