@@ -1,12 +1,12 @@
 # 🖼️ Windows Wallpaper Slideshow
 
-A lightweight, high-performance C# utility that brings dynamic wallpaper rotation to Windows 10 and 11. Ported from Python to native .NET 8 to reduce memory usage by 90%.
+A lightweight, high-performance C# utility that brings dynamic wallpaper rotation to Windows 10 and 11. Ported from Python to native .NET 10 to reduce memory usage by 90%.
 
 [![Download Latest Release](https://img.shields.io/badge/Download-Latest_Release-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/osmanonurkoc/wallchanger/releases/latest)
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D4.svg)
-![Runtime](https://img.shields.io/badge/.NET-6.0%2B-512BD4.svg)
+![Runtime](https://img.shields.io/badge/.NET-10.0%2B-512BD4.svg)
 ![Downloads](https://img.shields.io/github/downloads/osmanonurkoc/wallchanger/total)
 ![Release](https://img.shields.io/github/v/release/osmanonurkoc/wallchanger)
 
@@ -39,7 +39,7 @@ The original Python version consumed ~120MB of RAM due to the embedded interpret
 
 ### Prerequisites
 * **OS:** Windows 10 or Windows 11.
-* **Runtime:** [.NET Desktop Runtime 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/6.0) or higher.
+* **Runtime:** [.NET Desktop Runtime 10.0](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) or higher.
 
 ### Installation
 
